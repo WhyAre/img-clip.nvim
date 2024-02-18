@@ -4,7 +4,7 @@ local util = require("img-clip.util")
 local M = {}
 
 ---@type string
-M.sep = package.config:sub(1, 1)
+M.sep = '/'
 
 ---@param path string
 ---@return string
