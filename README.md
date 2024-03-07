@@ -51,6 +51,8 @@ return {
 The plugin comes with the following commands:
 
 - `PasteImage` Inserts the image from the clipboard into the document.
+- `ImgClipDebug` Prints the debug log, including the output of shell commands.
+- `ImgClipConfig` Prints the current configuration.
 
 Consider binding `PasteImage` to something like `<leader>p`.
 
@@ -59,7 +61,13 @@ Consider binding `PasteImage` to something like `<leader>p`.
 You can also use the Lua equivalent, which allows you to override your configuration by passing the options directly to the function:
 
 ```lua
-require("img-clip").pasteImage({ use_absolute_path = false, file_name = "image.png" })
+require("img-clip").paste_image(opts?, input?) -- input is optional and can be a file path or URL
+```
+
+Example:
+
+```lua
+require("img-clip").paste_image({ use_absolute_path = false, file_name = "image.png" }, "/path/to/file.png")
 ```
 
 ## Configuration
@@ -71,7 +79,6 @@ The plugin comes with the following defaults:
 ```lua
 {
   default = {
-    debug = false, -- enable debug mode
     dir_path = "assets", -- directory path to save images to, can be relative (cwd or current file) or absolute
     file_name = "%Y-%m-%d-%H-%M-%S", -- file name format (see lua.org/pil/22.1.html)
     url_encode_path = false, -- encode spaces and special characters in file path

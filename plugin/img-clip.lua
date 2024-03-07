@@ -1,13 +1,26 @@
-local img_clip = require("img-clip")
+local debug = require("img-clip.debug")
 local config = require("img-clip.config")
-local drag_and_drop = require("img-clip.drag_and_drop")
+local util = require("img-clip.util")
+local plugin = require("img-clip")
+
+plugin.setup()
 
 vim.api.nvim_create_user_command("PasteImage", function()
-  img_clip.pasteImage()
+  plugin.pasteImage()
+end, {})
+
+vim.api.nvim_create_user_command("ImgClipDebug", function()
+  debug.print_log()
+end, {})
+
+vim.api.nvim_create_user_command("ImgClipConfig", function()
+  config.print_config()
 end, {})
 
 local buffer = ""
 
+---@param lines string[]
+---@param phase number
 local function convert_streaming_paste(lines, phase)
   if phase == 1 then
     buffer = ""
@@ -29,18 +42,16 @@ end
 -- override vim.paste to handle image pasting from system clipboard
 -- vim.paste is triggered when the users drops an image or file into the terminal
 -- it will contain the path to the image or file, or a link to the image
-vim.paste = (function(overridden)
+vim.paste = (function(original)
   return function(lines, phase)
-    if config.get_opt("debug") then
-      print("Paste: " .. vim.inspect(lines))
-    end
+    debug.log("Paste: " .. vim.inspect(lines))
 
     if config.get_opt("drag_and_drop.enabled") == false then
-      return overridden(lines, phase)
+      return original(lines, phase)
     end
 
     if config.get_opt("drag_and_drop.insert_mode") == false and vim.fn.mode() == "i" then
-      return overridden(lines, phase)
+      return original(lines, phase)
     end
 
     if phase ~= -1 then
@@ -48,25 +59,23 @@ vim.paste = (function(overridden)
     end
 
     if #lines > 2 or #lines == 0 then
-      return overridden(lines, phase)
+      return original(lines, phase)
     end
 
     local line = lines[1]
 
-    if config.get_opt("debug") then
-      print("Line: " .. line)
-    end
+    debug.log("Line: " .. line)
 
     -- probably not a file path or url to an image if the input is this long
     if string.len(line) > 512 then
-      return overridden(lines, phase)
+      return original(lines, phase)
     end
 
-    if not drag_and_drop.handle_paste(line) then
-      if config.get_opt("debug") then
-        print("Did not handle paste, calling original vim.paste")
-      end
-      return overridden(lines, phase) -- if drag and drop did not handle the paste, call the original vim.paste function
+    util.verbose = false
+    if not plugin.pasteImage({}, line) then
+      debug.log("Did not handle paste, calling original vim.paste")
+      util.verbose = true
+      return original(lines, phase) -- if we did not handle the paste, call the original vim.paste function
     end
   end
 end)(vim.paste)

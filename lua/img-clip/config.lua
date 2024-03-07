@@ -1,11 +1,13 @@
 local M = {}
 
+M.config_file = "Default"
+M.sorted_files = {}
+M.sorted_dirs = {}
 M.configs = {}
 M.opts = {}
 
 local defaults = {
   default = {
-    debug = false, -- enable debug mode
     dir_path = "assets", -- directory path to save images to, can be relative (cwd or current file) or absolute
     file_name = "%Y-%m-%d-%H-%M-%S", -- file name format (see lua.org/pil/22.1.html)
     url_encode_path = false, -- encode spaces and special characters in file path
@@ -100,6 +102,8 @@ defaults.filetypes.plaintex = defaults.filetypes.tex
 defaults.filetypes.rmd = defaults.filetypes.markdown
 defaults.filetypes.md = defaults.filetypes.markdown
 
+---sorts the files and dirs tables by length of the path
+---so more specific paths have priority over less specific paths
 ---@param opts table
 ---@return table
 M.sort_config = function(opts)
@@ -117,14 +121,14 @@ M.sort_config = function(opts)
     return sorted_keys
   end
 
-  opts["sorted_files"] = sort_keys(opts["files"])
-  opts["sorted_dirs"] = sort_keys(opts["dirs"])
+  M.sorted_files = sort_keys(opts["files"])
+  M.sorted_dirs = sort_keys(opts["dirs"])
 
   return opts
 end
 
----Gets the config
----Can be either the default config or the config from the config file
+---get the config
+---can be either the default config or the config from the config file
 ---@return table
 M.get_config = function()
   -- use cached config if available
@@ -132,8 +136,9 @@ M.get_config = function()
   if M.configs[dir_path] and M.configs[dir_path] ~= {} then
     return M.configs[dir_path]
 
-  -- no config file found, use default config
+  -- no cached config file found, use default config
   elseif M.configs[dir_path] == {} then
+    M.config_file = "Default"
     return M.opts
   end
 
@@ -145,6 +150,7 @@ M.get_config = function()
     if success then
       local opts = vim.tbl_deep_extend("force", {}, defaults, output)
       M.configs[dir_path] = M.sort_config(opts)
+      M.config_file = config_file
       return M.configs[dir_path]
     else
       M.configs[dir_path] = {}
@@ -153,10 +159,11 @@ M.get_config = function()
   end
 
   -- use default config if no config file is found
+  M.config_file = "Default"
   return M.opts
 end
 
----Recursively gets the value of the option (e.g. "default.debug")
+---recursively gets the value of the option (e.g. "default.debug")
 ---@param key string
 ---@param opts table
 ---@return string | nil
@@ -174,7 +181,7 @@ local function recursive_get_opt(key, opts)
   return opts
 end
 
----Gets the value of the option, executing it if it's a function
+---get the value of the option, executing it if it's a function
 ---@param val any
 ---@param args? table
 ---@return string | nil
@@ -186,7 +193,7 @@ local function get_val(val, args)
   end
 end
 
----Gets the option from the custom table
+---get the option from the custom table
 ---@param key string
 ---@param args? table
 ---@return string | nil
@@ -202,7 +209,7 @@ local function get_custom_opt(key, opts, args)
   end
 end
 
----Gets the option from the files table
+---get the option from the files table
 ---@param key string
 ---@param args? table
 ---@return string | nil
@@ -215,7 +222,7 @@ local function get_file_opt(key, opts, args, file)
     return string.sub(f1:lower(), -#f2:lower()) == f2:lower()
   end
 
-  for _, config_file in ipairs(opts["sorted_files"]) do
+  for _, config_file in ipairs(M.sorted_files) do
     if file_matches(file, config_file) or file_matches(file, vim.fn.resolve(vim.fn.expand(config_file))) then
       return M.get_opt(key, {}, args, opts["files"][config_file])
     end
@@ -224,7 +231,7 @@ local function get_file_opt(key, opts, args, file)
   return nil
 end
 
----Gets the option from the dirs table
+---get the option from the dirs table
 ---@param key string
 ---@param args? table
 ---@return string | nil
@@ -237,7 +244,7 @@ local function get_dir_opt(key, opts, args, dir)
     return string.find(d1:lower(), d2:lower(), 1, true)
   end
 
-  for _, config_dir in ipairs(opts["sorted_dirs"]) do
+  for _, config_dir in ipairs(M.sorted_dirs) do
     if dir_matches(dir, config_dir) or dir_matches(dir, vim.fn.resolve(vim.fn.expand(config_dir))) then
       return M.get_opt(key, {}, args, opts["dirs"][config_dir])
     end
@@ -246,21 +253,21 @@ local function get_dir_opt(key, opts, args, dir)
   return nil
 end
 
----Gets the option from the filetypes table
+---get the option from the filetypes table
 ---@param key string
 ---@return string | nil
 local function get_filetype_opt(key, opts, ft)
   return recursive_get_opt("filetypes." .. ft .. "." .. key, opts)
 end
 
----Gets the option from the default table
+---get the option from the default table
 ---@param key string
 ---@return string | nil
 local function get_default_opt(key, opts)
   return recursive_get_opt("default." .. key, opts)
 end
 
----Gets the option from the main opts table
+---get the option from the main opts table
 ---@param key string
 ---@return string | nil
 local function get_unscoped_opt(key, opts)
@@ -304,11 +311,17 @@ M.get_opt = function(key, api_opts, args, opts)
   return get_val(val, args)
 end
 
+---@param config_opts? table
 function M.setup(config_opts)
   M.opts = vim.tbl_deep_extend("force", {}, defaults, config_opts or {})
   M.opts = M.sort_config(M.opts)
 end
 
-M.setup()
+M.print_config = function()
+  local config = M.get_config()
+
+  print("Config file: " .. M.config_file)
+  vim.print(config)
+end
 
 return M
