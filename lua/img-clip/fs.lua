@@ -71,29 +71,28 @@ M.add_file_ext = function(str, ext)
 end
 
 ---@param ext string
----@param opts? table
 ---@return string
-M.get_file_path = function(ext, opts)
-  local config_dir_path = config.get_opt("dir_path", opts)
-  local config_file_name = os.date(config.get_opt("file_name", opts))
+M.get_file_path = function(ext)
+  local config_dir_path = config.get_opt("dir_path")
+  local config_file_name = os.date(config.get_opt("file_name"))
 
   local dir_path = config_dir_path
-  if config.get_opt("relative_to_current_file", opts) then
+  if config.get_opt("relative_to_current_file") then
     local current_file_path = vim.fn.expand("%:.:h")
     if current_file_path ~= "." and current_file_path ~= "" then
       dir_path = current_file_path .. M.sep .. config_dir_path
     end
   end
 
-  if config.get_opt("use_absolute_path", opts) then
+  if config.get_opt("use_absolute_path") then
     dir_path = vim.fn.fnamemodify(dir_path, ":p")
   end
 
   dir_path = M.normalize_path(dir_path)
 
   local file_path
-  if config.get_opt("prompt_for_file_name", opts) then
-    if config.get_opt("show_dir_path_in_prompt", opts) then
+  if config.get_opt("prompt_for_file_name") then
+    if config.get_opt("show_dir_path_in_prompt") then
       local input_file_path = util.input({
         prompt = "File path: ",
         default = dir_path,
@@ -159,9 +158,44 @@ M.copy_file = function(src, dest)
 end
 
 ---@param file_path string
+---@param opts? table
+---@return string | nil output
+---@return number exit_code
+M.process_image = function(file_path, opts)
+  local process_cmd = config.get_opt("process_cmd", opts)
+  if not process_cmd or process_cmd == "" then
+    return "", 0
+  end
+
+  if util.has("win32") then
+    util.warn("Windows does not support image processing yet.")
+    return "", 0
+  end
+
+  -- create temp file
+  local tmp_file_path = file_path .. ".tmp"
+
+  -- process image
+  local output, exit_code =
+    util.execute(string.format("cat '%s' | %s > '%s'", file_path, process_cmd:gsub("%%", "%%%%"), tmp_file_path), true)
+  if exit_code == 0 then
+    M.copy_file(tmp_file_path, file_path)
+  end
+
+  -- remove temp file
+  util.execute(string.format("rm '%s'", tmp_file_path), true)
+
+  return output, exit_code
+end
+
+---@param file_path string
 ---@return string | nil
 M.get_base64_encoded_image = function(file_path)
   local cmd = clipoard.get_clip_cmd()
+  local process_cmd = config.get_opt("process_cmd")
+  if process_cmd ~= "" then
+    process_cmd = "| " .. process_cmd .. " "
+  end
 
   -- Windows
   if cmd == "powershell.exe" then
@@ -173,7 +207,7 @@ M.get_base64_encoded_image = function(file_path)
 
   -- Linux/MacOS
   else
-    local command = string.format("base64 '%s' | tr -d '\n'", file_path)
+    local command = string.format("cat '%s' " .. process_cmd:gsub("%%", "%%%%") .. "| base64 | tr -d '\n'", file_path)
     local output, exit_code = util.execute(command)
     if exit_code == 0 then
       return output
