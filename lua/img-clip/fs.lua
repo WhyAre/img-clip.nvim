@@ -84,10 +84,6 @@ M.get_file_path = function(ext)
     end
   end
 
-  if config.get_opt("use_absolute_path") then
-    dir_path = vim.fn.fnamemodify(dir_path, ":p")
-  end
-
   dir_path = M.normalize_path(dir_path)
 
   local file_path
@@ -117,8 +113,10 @@ M.get_file_path = function(ext)
     file_path = dir_path .. config_file_name
   end
 
-  -- add file ext
-  file_path = M.add_file_ext(file_path, ext)
+  -- add file ext if missing
+  if vim.fn.fnamemodify(file_path, ":e") == "" then
+    file_path = M.add_file_ext(file_path, ext)
+  end
   return file_path
 end
 
